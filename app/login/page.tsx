@@ -25,7 +25,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-3">
           <div className="relative w-28 h-28">
             <Image
-              src="/capybara.png"
+              src="/capybara.jpg"
               alt="Capybara mascot"
               fill
               className="object-contain drop-shadow-md"

@@ -86,7 +86,7 @@ export default function ManagerPage() {
         {/* Welcome */}
         <div className="bg-white rounded-3xl p-5 flex items-center gap-4 shadow-sm">
           <div className="relative w-16 h-16 shrink-0">
-            <Image src="/capybara.png" alt="mascot" fill className="object-contain" />
+            <Image src="/capybara.jpg" alt="mascot" fill className="object-contain" />
           </div>
           <div>
             <h1 className="text-lg font-bold text-gray-800">
