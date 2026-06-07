@@ -10,8 +10,11 @@ interface LarkNotificationPayload {
   notes?: string
 }
 
-export async function sendLarkNotification(payload: LarkNotificationPayload): Promise<boolean> {
-  const webhookUrl = process.env.LARK_WEBHOOK_URL
+export async function sendLarkNotification(
+  payload: LarkNotificationPayload,
+  overrideWebhookUrl?: string
+): Promise<boolean> {
+  const webhookUrl = overrideWebhookUrl || process.env.LARK_WEBHOOK_URL
   if (!webhookUrl) {
     console.warn('LARK_WEBHOOK_URL not set — skipping notification')
     return false

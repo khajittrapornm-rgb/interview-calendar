@@ -70,6 +70,23 @@ create policy "slots_all_service" on interview_slots using (true) with check (tr
 create policy "bookings_select" on bookings for select using (true);
 create policy "bookings_all_service" on bookings using (true) with check (true);
 
+-- ---- 4. Lark Webhooks (กลุ่ม Lark แยกตามแผนก/ตำแหน่ง) ----
+create table if not exists lark_webhooks (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,         -- ชื่อกลุ่ม เช่น "Sales Interview"
+  webhook_url text not null,         -- Lark Incoming Webhook URL
+  created_at  timestamptz default now()
+);
+
+-- เพิ่มคอลัมน์ lark_webhook_id ใน interview_slots
+alter table interview_slots
+  add column if not exists lark_webhook_id uuid references lark_webhooks(id) on delete set null;
+
+-- RLS สำหรับ lark_webhooks: ทุกคนอ่านได้ (Manager ต้องดูรายการ), แก้ผ่าน service role
+alter table lark_webhooks enable row level security;
+create policy "lark_webhooks_select" on lark_webhooks for select using (true);
+create policy "lark_webhooks_all_service" on lark_webhooks using (true) with check (true);
+
 -- ======================================================
 -- ตั้งค่า Admin คนแรก (ทำ 1 ครั้งหลัง deploy)
 -- เปลี่ยน your-email@dplusonline.net เป็น email จริงของ Admin

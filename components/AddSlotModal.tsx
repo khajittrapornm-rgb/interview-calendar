@@ -1,10 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Plus, CalendarDays, MousePointerClick, Clock, AlertCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Plus, CalendarDays, MousePointerClick, Clock, AlertCircle, Bell } from 'lucide-react'
 import { generateTimeSlots, addMinutes, formatThaiDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
+
+interface LarkWebhook {
+  id: string
+  name: string
+  webhook_url: string
+}
 
 interface Props {
   onClose: () => void
@@ -44,11 +50,22 @@ export default function AddSlotModal({ onClose, onAdded }: Props) {
   const [duration, setDuration] = useState(60)
   const [loading, setLoading] = useState(false)
 
+  // Lark webhook state
+  const [webhooks, setWebhooks] = useState<LarkWebhook[]>([])
+  const [selectedWebhookId, setSelectedWebhookId] = useState<string>('')
+
   // calendar mode state
   const [busy, setBusy] = useState<BusySlot[]>([])
   const [calLoading, setCalLoading] = useState(false)
   const [calError, setCalError] = useState('')
   const [calLoaded, setCalLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/webhooks')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setWebhooks(d) })
+      .catch(() => {})
+  }, [])
 
   const endTime = addMinutes(startTime, duration)
 
@@ -97,7 +114,7 @@ export default function AddSlotModal({ onClose, onAdded }: Props) {
       const res = await fetch('/api/slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, start_time: startTime, end_time: endTime, duration_minutes: duration }),
+        body: JSON.stringify({ date, start_time: startTime, end_time: endTime, duration_minutes: duration, lark_webhook_id: selectedWebhookId || null }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -279,6 +296,26 @@ export default function AddSlotModal({ onClose, onAdded }: Props) {
               : <>สัมภาษณ์เวลา <strong>{startTime} – {endTime} น.</strong></>
             }
           </div>
+
+          {/* Lark group selector — แสดงเฉพาะเมื่อมีกลุ่มในระบบ */}
+          {webhooks.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-mint-500" />
+                แจ้งเตือนไปกลุ่ม Lark
+              </label>
+              <select
+                value={selectedWebhookId}
+                onChange={e => setSelectedWebhookId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-400"
+              >
+                <option value="">— ไม่ระบุ (ใช้กลุ่มหลัก) —</option>
+                {webhooks.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button
             type="submit"

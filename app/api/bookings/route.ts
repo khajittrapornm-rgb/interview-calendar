@@ -20,10 +20,10 @@ export async function POST(req: NextRequest) {
 
   const db = createServiceClient()
 
-  // ดึง slot + manager profile
+  // ดึง slot + manager profile + lark webhook
   const { data: slot, error: slotErr } = await db
     .from('interview_slots')
-    .select('*, manager:profiles!manager_id(name,email)')
+    .select('*, manager:profiles!manager_id(name,email), lark_webhook:lark_webhooks(webhook_url)')
     .eq('id', slot_id)
     .eq('status', 'available')
     .single()
@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: bookingResult.error.message }, { status: 500 })
   }
 
-  // ส่ง Lark แจ้งเตือน
+  // ส่ง Lark แจ้งเตือน (ใช้ webhook จาก slot ถ้ามี มิฉะนั้นใช้ env default)
+  const slotWebhookUrl = (slot.lark_webhook as { webhook_url: string } | null)?.webhook_url
   const notified = await sendLarkNotification({
     candidateName: candidate_name,
     position,
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
     hrName: session.user.name ?? 'HR',
     meetLink: slot.meet_link,
     notes,
-  })
+  }, slotWebhookUrl)
 
   if (notified) {
     await db.from('bookings').update({ lark_notified: true }).eq('id', bookingResult.data.id)

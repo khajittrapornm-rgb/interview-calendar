@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { date, start_time, end_time, duration_minutes } = body
+  const { date, start_time, end_time, duration_minutes, lark_webhook_id } = body
 
   if (!date || !start_time || !end_time) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
       end_time,
       duration_minutes: duration_minutes ?? 60,
       status: 'available',
+      lark_webhook_id: lark_webhook_id ?? null,
     })
     .select()
     .single()
