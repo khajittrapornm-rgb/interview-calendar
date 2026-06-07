@@ -119,18 +119,27 @@ export default function DashboardPage() {
     })
   }, [allBookings, filterHR, filterGroup, filterPeriod, today])
 
-  const upcoming = filteredBookings.filter(b => new Date(b.slot?.date ?? '') >= today)
-  const thisWeekCount = allBookings.filter(b => {
-    if (b.status !== 'confirmed') return false
+  // base = filtered by HR + group (ไม่รวม period filter) เพื่อคำนวณ stats
+  const baseBookings = useMemo(() => {
+    let list = allBookings.filter(b => b.status === 'confirmed')
+    if (filterHR !== 'all') list = list.filter(b => b.hr_id === filterHR)
+    if (filterGroup !== 'all') list = list.filter(b => (b.slot as { lark_webhook_id?: string })?.lark_webhook_id === filterGroup)
+    return list
+  }, [allBookings, filterHR, filterGroup])
+
+  const nextWeek = useMemo(() => { const d = new Date(today); d.setDate(today.getDate() + 7); return d }, [today])
+
+  const thisWeekCount = useMemo(() => baseBookings.filter(b => {
     const d = new Date(b.slot?.date ?? '')
-    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7)
     return d >= today && d < nextWeek
-  }).length
-  const thisMonthCount = allBookings.filter(b => {
-    if (b.status !== 'confirmed') return false
+  }).length, [baseBookings, today, nextWeek])
+
+  const thisMonthCount = useMemo(() => baseBookings.filter(b => {
     const d = new Date(b.slot?.date ?? '')
     return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
-  }).length
+  }).length, [baseBookings, today])
+
+  const totalCount = baseBookings.length
 
   const hasFilter = filterHR !== 'all' || filterGroup !== 'all' || filterPeriod !== 'all'
 
@@ -143,10 +152,10 @@ export default function DashboardPage() {
   }
 
   const stats = [
-    { icon: CalendarCheck, label: 'สัมภาษณ์สัปดาห์นี้', value: thisWeekCount, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { icon: TrendingUp, label: 'จองเดือนนี้', value: thisMonthCount, color: 'text-purple-500', bg: 'bg-purple-50' },
+    { icon: CalendarCheck, label: 'สัปดาห์นี้', value: thisWeekCount, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { icon: TrendingUp, label: 'เดือนนี้', value: thisMonthCount, color: 'text-purple-500', bg: 'bg-purple-50' },
+    { icon: CheckCircle2, label: 'ทั้งหมด', value: totalCount, color: 'text-emerald-500', bg: 'bg-emerald-50' },
     { icon: Clock, label: 'slot ว่างเหลือ', value: availableCount, color: 'text-mint-600', bg: 'bg-mint-50' },
-    { icon: Users, label: 'Manager ทั้งหมด', value: managerCount, color: 'text-amber-500', bg: 'bg-amber-50' },
   ]
 
   return (
