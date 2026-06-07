@@ -98,10 +98,11 @@ export async function GET(req: NextRequest) {
   if (session.user.role === 'manager') {
     // Manager เห็นเฉพาะ booking ใน slot ของตัวเอง
     query = query.eq('slot.manager_id', session.user.profileId)
-  } else {
+  } else if (session.user.role === 'hr') {
     // HR เห็น booking ที่ตัวเองสร้าง
     query = query.eq('hr_id', session.user.profileId)
   }
+  // Admin เห็นทั้งหมด — ไม่ filter
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

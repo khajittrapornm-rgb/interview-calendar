@@ -2,8 +2,8 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
-import { CalendarDays, Clock, CheckCircle2, Users, TrendingUp, CalendarCheck } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { CalendarDays, Clock, CheckCircle2, Users, TrendingUp, CalendarCheck, Filter } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import { Booking } from '@/lib/types'
 import Image from 'next/image'
@@ -14,13 +14,28 @@ function formatThaiDateShort(d: string) {
   })
 }
 
+interface HRUser { id: string; name: string; email: string }
+interface LarkGroup { id: string; name: string }
+
+type PeriodFilter = 'week' | 'month' | 'all'
+
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [bookings, setBookings] = useState<Booking[]>([])
+
+  const [allBookings, setAllBookings] = useState<Booking[]>([])
   const [availableCount, setAvailableCount] = useState(0)
   const [managerCount, setManagerCount] = useState(0)
+  const [hrUsers, setHrUsers] = useState<HRUser[]>([])
+  const [larkGroups, setLarkGroups] = useState<LarkGroup[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Filters
+  const [filterHR, setFilterHR] = useState<string>('all')
+  const [filterGroup, setFilterGroup] = useState<string>('all')
+  const [filterPeriod, setFilterPeriod] = useState<PeriodFilter>('all')
+
+  const isAdmin = session?.user.role === 'admin'
 
   useEffect(() => {
     if (status === 'loading') return
@@ -31,17 +46,19 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [bookingsRes, slotsRes, managersRes] = await Promise.all([
+      const [bookingsRes, slotsRes, managersRes, webhooksRes] = await Promise.all([
         fetch('/api/bookings'),
         fetch('/api/slots'),
         fetch('/api/managers'),
+        fetch('/api/admin/webhooks'),
       ])
-      const [bookingsData, slotsData, managersData] = await Promise.all([
-        bookingsRes.json(), slotsRes.json(), managersRes.json()
+      const [bookingsData, slotsData, managersData, webhooksData] = await Promise.all([
+        bookingsRes.json(), slotsRes.json(), managersRes.json(), webhooksRes.json()
       ])
-      setBookings(Array.isArray(bookingsData) ? bookingsData : [])
+      setAllBookings(Array.isArray(bookingsData) ? bookingsData : [])
       setAvailableCount(Array.isArray(slotsData) ? slotsData.length : 0)
       setManagerCount(Array.isArray(managersData) ? managersData.length : 0)
+      setLarkGroups(Array.isArray(webhooksData) ? webhooksData : [])
     } catch {
       // silent
     } finally {
@@ -49,9 +66,73 @@ export default function DashboardPage() {
     }
   }, [])
 
+  // ดึง HR users (admin เท่านั้น)
+  useEffect(() => {
+    if (isAdmin) {
+      fetch('/api/admin/users')
+        .then(r => r.json())
+        .then(d => {
+          if (Array.isArray(d)) setHrUsers(d.filter((u: HRUser & { role: string }) => u.role === 'hr'))
+        })
+        .catch(() => {})
+    }
+  }, [isAdmin])
+
   useEffect(() => {
     if (session?.user.role !== 'manager') fetchData()
   }, [session, fetchData])
+
+  // คำนวณ filtered bookings
+  const today = useMemo(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d
+  }, [])
+
+  const filteredBookings = useMemo(() => {
+    let list = allBookings.filter(b => b.status === 'confirmed')
+
+    // Filter by HR
+    if (filterHR !== 'all') list = list.filter(b => b.hr_id === filterHR)
+
+    // Filter by Lark group
+    if (filterGroup !== 'all') {
+      list = list.filter(b => (b.slot as { lark_webhook_id?: string })?.lark_webhook_id === filterGroup)
+    }
+
+    // Filter by period
+    if (filterPeriod === 'week') {
+      const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7)
+      list = list.filter(b => {
+        const d = new Date(b.slot?.date ?? '')
+        return d >= today && d < nextWeek
+      })
+    } else if (filterPeriod === 'month') {
+      list = list.filter(b => {
+        const d = new Date(b.slot?.date ?? '')
+        return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
+      })
+    }
+
+    return list.sort((a, b) => {
+      const da = a.slot?.date ?? ''; const db = b.slot?.date ?? ''
+      const ta = a.slot?.start_time ?? ''; const tb = b.slot?.start_time ?? ''
+      return da.localeCompare(db) || ta.localeCompare(tb)
+    })
+  }, [allBookings, filterHR, filterGroup, filterPeriod, today])
+
+  const upcoming = filteredBookings.filter(b => new Date(b.slot?.date ?? '') >= today)
+  const thisWeekCount = allBookings.filter(b => {
+    if (b.status !== 'confirmed') return false
+    const d = new Date(b.slot?.date ?? '')
+    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7)
+    return d >= today && d < nextWeek
+  }).length
+  const thisMonthCount = allBookings.filter(b => {
+    if (b.status !== 'confirmed') return false
+    const d = new Date(b.slot?.date ?? '')
+    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
+  }).length
+
+  const hasFilter = filterHR !== 'all' || filterGroup !== 'all' || filterPeriod !== 'all'
 
   if (status === 'loading' || !session) {
     return (
@@ -61,35 +142,9 @@ export default function DashboardPage() {
     )
   }
 
-  // คำนวณสถิติ
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const nextWeek = new Date(today)
-  nextWeek.setDate(today.getDate() + 7)
-
-  const confirmed = bookings.filter(b => b.status === 'confirmed')
-  const upcoming = confirmed
-    .filter(b => {
-      const d = new Date(b.slot?.date ?? '')
-      return d >= today
-    })
-    .sort((a, b) => {
-      const da = a.slot?.date ?? ''
-      const db = b.slot?.date ?? ''
-      const ta = a.slot?.start_time ?? ''
-      const tb = b.slot?.start_time ?? ''
-      return da.localeCompare(db) || ta.localeCompare(tb)
-    })
-
-  const thisWeek = upcoming.filter(b => new Date(b.slot?.date ?? '') < nextWeek)
-  const thisMonth = confirmed.filter(b => {
-    const d = new Date(b.slot?.date ?? '')
-    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
-  })
-
   const stats = [
-    { icon: CalendarCheck, label: 'สัมภาษณ์สัปดาห์นี้', value: thisWeek.length, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { icon: TrendingUp, label: 'จองเดือนนี้', value: thisMonth.length, color: 'text-purple-500', bg: 'bg-purple-50' },
+    { icon: CalendarCheck, label: 'สัมภาษณ์สัปดาห์นี้', value: thisWeekCount, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { icon: TrendingUp, label: 'จองเดือนนี้', value: thisMonthCount, color: 'text-purple-500', bg: 'bg-purple-50' },
     { icon: Clock, label: 'slot ว่างเหลือ', value: availableCount, color: 'text-mint-600', bg: 'bg-mint-50' },
     { icon: Users, label: 'Manager ทั้งหมด', value: managerCount, color: 'text-amber-500', bg: 'bg-amber-50' },
   ]
@@ -110,7 +165,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats (ภาพรวมทั้งหมดเสมอ) */}
         <div className="grid grid-cols-2 gap-3">
           {stats.map(({ icon: Icon, label, value, color, bg }) => (
             <div key={label} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
@@ -125,43 +180,118 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Upcoming interviews */}
+        {/* Filters */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+            <Filter className="w-4 h-4" />
+            กรองรายการสัมภาษณ์
+          </div>
+
+          {/* Period filter */}
+          <div className="flex gap-2">
+            {([
+              { key: 'all', label: 'ทั้งหมด' },
+              { key: 'week', label: '7 วันข้างหน้า' },
+              { key: 'month', label: 'เดือนนี้' },
+            ] as { key: PeriodFilter; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilterPeriod(key)}
+                className={`flex-1 py-2 rounded-xl text-xs font-medium transition-colors ${
+                  filterPeriod === key
+                    ? 'bg-mint-500 text-white'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* HR filter (admin only) */}
+            {isAdmin && hrUsers.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">🧑‍💼 HR</label>
+                <select
+                  value={filterHR}
+                  onChange={e => setFilterHR(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-400"
+                >
+                  <option value="all">ทุก HR</option>
+                  {hrUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Lark group filter */}
+            {larkGroups.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">🔔 กลุ่ม Interview</label>
+                <select
+                  value={filterGroup}
+                  onChange={e => setFilterGroup(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-400"
+                >
+                  <option value="all">ทุกกลุ่ม</option>
+                  {larkGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {hasFilter && (
+            <button
+              onClick={() => { setFilterHR('all'); setFilterGroup('all'); setFilterPeriod('all') }}
+              className="text-xs text-gray-400 hover:text-mint-600 underline"
+            >
+              ล้างตัวกรอง
+            </button>
+          )}
+        </div>
+
+        {/* Booking list */}
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
             <CalendarDays className="w-4 h-4 text-mint-500" />
             <h2 className="text-sm font-semibold text-gray-700">
-              นัดสัมภาษณ์ที่กำลังจะมาถึง
+              {filterPeriod === 'week' ? 'สัมภาษณ์ 7 วันข้างหน้า'
+                : filterPeriod === 'month' ? 'สัมภาษณ์เดือนนี้'
+                : 'นัดสัมภาษณ์ทั้งหมด'}
             </h2>
-            {upcoming.length > 0 && (
-              <span className="ml-auto text-xs bg-mint-100 text-mint-700 px-2 py-0.5 rounded-full">
-                {upcoming.length} นัด
-              </span>
-            )}
+            <span className="ml-auto text-xs bg-mint-100 text-mint-700 px-2 py-0.5 rounded-full">
+              {filteredBookings.length} นัด
+            </span>
           </div>
 
           {loading ? (
             <div className="text-center py-10 text-gray-400 text-sm">กำลังโหลด...</div>
-          ) : upcoming.length === 0 ? (
+          ) : filteredBookings.length === 0 ? (
             <div className="text-center py-12 space-y-2">
               <CheckCircle2 className="w-10 h-10 text-gray-200 mx-auto" />
-              <p className="text-sm text-gray-400">ยังไม่มีนัดที่กำลังจะมาถึง</p>
+              <p className="text-sm text-gray-400">ไม่พบรายการที่ตรงกับตัวกรอง</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {upcoming.slice(0, 10).map(b => {
+              {filteredBookings.map(b => {
                 const slotDate = b.slot?.date ?? ''
+                const isPast = new Date(slotDate) < today
                 const isToday = new Date(slotDate).toDateString() === today.toDateString()
                 const isTomorrow = new Date(slotDate).toDateString() === new Date(today.getTime() + 86400000).toDateString()
                 const tag = isToday ? '🔴 วันนี้' : isTomorrow ? '🟡 พรุ่งนี้' : null
 
                 return (
-                  <div key={b.id} className="px-5 py-4 flex items-center gap-3">
+                  <div key={b.id} className={`px-5 py-4 flex items-center gap-3 ${isPast ? 'opacity-50' : ''}`}>
                     {/* Date badge */}
                     <div className="w-12 text-center shrink-0">
                       <div className="text-xs text-gray-400">
                         {new Date(slotDate).toLocaleDateString('th-TH', { month: 'short' })}
                       </div>
-                      <div className="text-xl font-bold text-mint-600 leading-tight">
+                      <div className={`text-xl font-bold leading-tight ${isPast ? 'text-gray-400' : 'text-mint-600'}`}>
                         {new Date(slotDate).getDate()}
                       </div>
                     </div>
@@ -171,6 +301,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-gray-800">{b.candidate_name}</span>
                         {tag && <span className="text-xs font-medium">{tag}</span>}
+                        {isPast && <span className="text-xs text-gray-400">✓ ผ่านมาแล้ว</span>}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">{b.position}</div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
@@ -181,10 +312,12 @@ export default function DashboardPage() {
                         {b.slot?.manager && (
                           <span>👔 {(b.slot.manager as { name: string }).name}</span>
                         )}
+                        {isAdmin && b.hr && (
+                          <span>🧑‍💼 {(b.hr as { name: string }).name}</span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Date label */}
                     <div className="text-xs text-gray-400 text-right shrink-0 hidden sm:block">
                       {formatThaiDateShort(slotDate)}
                     </div>
@@ -194,18 +327,6 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-
-        {/* Past bookings summary */}
-        {confirmed.length > upcoming.length && (
-          <div className="bg-gray-50 rounded-2xl p-4 text-center">
-            <p className="text-xs text-gray-400">
-              มีการสัมภาษณ์ที่ผ่านมาแล้วทั้งหมด{' '}
-              <span className="font-semibold text-gray-600">
-                {confirmed.length - upcoming.length} นัด
-              </span>
-            </p>
-          </div>
-        )}
       </main>
     </div>
   )
