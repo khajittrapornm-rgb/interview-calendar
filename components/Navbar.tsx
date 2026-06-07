@@ -4,7 +4,7 @@ import { useSession, signOut } from 'next-auth/react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { LogOut, Menu, X, Calendar, Shield } from 'lucide-react'
+import { LogOut, Menu, X, Calendar, Shield, LayoutDashboard } from 'lucide-react'
 
 export default function Navbar() {
   const { data: session } = useSession()
@@ -28,6 +28,15 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-4">
+            {(session.user.role === 'hr' || session.user.role === 'admin') && (
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1 text-sm text-mint-600 hover:text-mint-800 font-medium"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Link>
+            )}
             {session.user.role === 'admin' && (
               <Link
                 href="/admin"
@@ -73,6 +82,16 @@ export default function Navbar() {
         {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden pb-4 border-t border-mint-50 pt-3 space-y-3">
+            {(session.user.role === 'hr' || session.user.role === 'admin') && (
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 text-sm text-mint-600 font-medium px-1"
+                onClick={() => setMenuOpen(false)}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Link>
+            )}
             {session.user.role === 'admin' && (
               <Link
                 href="/admin"
