@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { CalendarDays, Clock, CheckCircle2, Users, TrendingUp, CalendarCheck, Filter } from 'lucide-react'
+import { CalendarDays, Clock, CheckCircle2, Users, TrendingUp, CalendarCheck, Filter, Download } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import { Booking } from '@/lib/types'
 import Image from 'next/image'
@@ -12,6 +12,36 @@ function formatThaiDateShort(d: string) {
   return new Date(d).toLocaleDateString('th-TH', {
     weekday: 'short', day: 'numeric', month: 'short', year: '2-digit'
   })
+}
+
+function exportToCSV(bookings: Booking[], filename: string) {
+  const headers = ['วันที่สัมภาษณ์', 'เวลาเริ่ม', 'เวลาจบ', 'ชื่อผู้สมัคร', 'ตำแหน่ง', 'แผนก', 'Manager', 'HR ที่จอง', 'กลุ่ม Lark', 'สถานะ']
+
+  const rows = bookings.map(b => [
+    b.slot?.date ?? '',
+    b.slot?.start_time?.substring(0, 5) ?? '',
+    b.slot?.end_time?.substring(0, 5) ?? '',
+    b.candidate_name,
+    b.position,
+    b.department ?? '',
+    (b.slot?.manager as { name: string } | undefined)?.name ?? '',
+    (b.hr as { name: string } | undefined)?.name ?? '',
+    (b.slot as { lark_webhook?: { name: string } } | undefined)?.lark_webhook?.name ?? '',
+    b.status === 'confirmed' ? 'ยืนยัน' : 'ยกเลิก',
+  ])
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+
+  // BOM สำหรับ Excel ภาษาไทย
+  const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 interface HRUser { id: string; name: string; email: string }
@@ -272,9 +302,20 @@ export default function DashboardPage() {
                 : filterPeriod === 'month' ? 'สัมภาษณ์เดือนนี้'
                 : 'นัดสัมภาษณ์ทั้งหมด'}
             </h2>
-            <span className="ml-auto text-xs bg-mint-100 text-mint-700 px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-mint-100 text-mint-700 px-2 py-0.5 rounded-full">
               {filteredBookings.length} นัด
             </span>
+            <button
+              onClick={() => {
+                const date = new Date().toISOString().split('T')[0]
+                exportToCSV(filteredBookings, `interview-${date}.csv`)
+              }}
+              disabled={filteredBookings.length === 0}
+              className="ml-auto flex items-center gap-1.5 text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-40 font-medium"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export Excel
+            </button>
           </div>
 
           {loading ? (
