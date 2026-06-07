@@ -32,6 +32,21 @@ interface OverlapGroup {
   slots: InterviewSlot[] // 1 slot per selected manager
 }
 
+// ฟังก์ชัน helper หา combination แบบ iterative (ไม่ใช้ recursive ใน block)
+function getCombinations(slotsByManager: InterviewSlot[][]): InterviewSlot[][] {
+  let result: InterviewSlot[][] = [[]]
+  for (const group of slotsByManager) {
+    const next: InterviewSlot[][] = []
+    for (const existing of result) {
+      for (const slot of group) {
+        next.push([...existing, slot])
+      }
+    }
+    result = next
+  }
+  return result
+}
+
 function findOverlaps(slots: InterviewSlot[], selectedManagerIds: string[]): OverlapGroup[] {
   if (selectedManagerIds.length < 2) return []
 
@@ -53,32 +68,21 @@ function findOverlaps(slots: InterviewSlot[], selectedManagerIds: string[]): Ove
     const managersOnDate = new Set(dateSlots.map(s => s.manager_id))
     if (!selectedManagerIds.every(id => managersOnDate.has(id))) continue
 
-    // Try all combinations (1 slot per manager) to find overlaps
-    // For simplicity, find the best overlap across all manager slots on this date
-    // by grouping per manager and finding any combination that overlaps
     const slotsByManager = selectedManagerIds.map(id => dateSlots.filter(s => s.manager_id === id))
+    const combinations = getCombinations(slotsByManager)
 
-    // Recursive combination finder
-    function combine(idx: number, chosen: InterviewSlot[]): void {
-      if (idx === slotsByManager.length) {
-        // Check overlap of all chosen slots
-        let maxStart = Math.max(...chosen.map(s => timeToMinutes(s.start_time)))
-        let minEnd = Math.min(...chosen.map(s => timeToMinutes(s.end_time)))
-        if (maxStart < minEnd) {
-          results.push({
-            date,
-            overlapStart: minutesToTime(maxStart),
-            overlapEnd: minutesToTime(minEnd),
-            slots: [...chosen],
-          })
-        }
-        return
-      }
-      for (const slot of slotsByManager[idx]) {
-        combine(idx + 1, [...chosen, slot])
+    for (const chosen of combinations) {
+      const maxStart = Math.max(...chosen.map(s => timeToMinutes(s.start_time)))
+      const minEnd = Math.min(...chosen.map(s => timeToMinutes(s.end_time)))
+      if (maxStart < minEnd) {
+        results.push({
+          date,
+          overlapStart: minutesToTime(maxStart),
+          overlapEnd: minutesToTime(minEnd),
+          slots: chosen,
+        })
       }
     }
-    combine(0, [])
   }
 
   // Deduplicate by same set of slot ids
