@@ -106,6 +106,10 @@ export default function HRPage() {
   const [searchDate, setSearchDate] = useState('')
   const [bookingSlot, setBookingSlot] = useState<InterviewSlot | null>(null)
 
+  // Lark group filter
+  const [selectedWebhookId, setSelectedWebhookId] = useState<string>('all')
+  const [webhooks, setWebhooks] = useState<{id: string; name: string}[]>([])
+
   // Compare mode state
   const [compareMode, setCompareMode] = useState(false)
   const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([])
@@ -141,6 +145,13 @@ export default function HRPage() {
   useEffect(() => {
     if (session?.user.role === 'hr') fetchData()
   }, [session, fetchData])
+
+  useEffect(() => {
+    fetch('/api/admin/webhooks')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setWebhooks(d) })
+      .catch(() => {})
+  }, [])
 
   // Fetch ALL available slots (no filter) when entering compare mode
   const [allSlots, setAllSlots] = useState<InterviewSlot[]>([])
@@ -188,15 +199,20 @@ export default function HRPage() {
     }
   }
 
+  // Filter by Lark group
+  const filteredSlots = selectedWebhookId === 'all'
+    ? slots
+    : slots.filter(s => s.lark_webhook?.id === selectedWebhookId)
+
   // Group slots by manager (normal mode)
-  const grouped = slots.reduce<Record<string, InterviewSlot[]>>((acc, slot) => {
+  const grouped = filteredSlots.reduce<Record<string, InterviewSlot[]>>((acc, slot) => {
     const key = slot.manager_id
     if (!acc[key]) acc[key] = []
     acc[key].push(slot)
     return acc
   }, {})
 
-  const totalAvailable = slots.length
+  const totalAvailable = filteredSlots.length
 
   if (status === 'loading' || !session) {
     return (
@@ -423,9 +439,27 @@ export default function HRPage() {
                   />
                 </div>
               </div>
-              {(selectedManager !== 'all' || searchDate) && (
+              {/* Lark group filter */}
+          {webhooks.length > 0 && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                🔔 กลุ่ม Lark
+              </label>
+              <select
+                value={selectedWebhookId}
+                onChange={e => setSelectedWebhookId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-400"
+              >
+                <option value="all">ทั้งหมด</option>
+                {webhooks.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {(selectedManager !== 'all' || searchDate || selectedWebhookId !== 'all') && (
                 <button
-                  onClick={() => { setSelectedManager('all'); setSearchDate('') }}
+                  onClick={() => { setSelectedManager('all'); setSearchDate(''); setSelectedWebhookId('all') }}
                   className="text-xs text-gray-400 hover:text-mint-600 underline"
                 >
                   ล้างตัวกรอง
@@ -436,7 +470,7 @@ export default function HRPage() {
             {/* Slot list */}
             {loading ? (
               <div className="text-center py-12 text-gray-400 text-sm">กำลังโหลด...</div>
-            ) : slots.length === 0 ? (
+            ) : filteredSlots.length === 0 ? (
               <div className="text-center py-12">
                 <Search className="w-12 h-12 text-mint-200 mx-auto mb-3" />
                 <p className="text-gray-500 text-sm">ไม่พบ slot ว่างในขณะนี้</p>
@@ -444,7 +478,7 @@ export default function HRPage() {
               </div>
             ) : selectedManager !== 'all' ? (
               <div className="space-y-3">
-                {slots.map(slot => (
+                {filteredSlots.map(slot => (
                   <SlotCard
                     key={slot.id}
                     slot={slot}

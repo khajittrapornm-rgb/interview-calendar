@@ -22,6 +22,8 @@ export interface InterviewSlot {
   status: 'available' | 'booked' | 'cancelled'
   google_event_id?: string
   meet_link?: string
+  lark_webhook_id?: string
+  lark_webhook?: { id: string; name: string }
   created_at: string
 }
 

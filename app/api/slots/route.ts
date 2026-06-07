@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   let query = db
     .from('interview_slots')
-    .select('*, manager:profiles!manager_id(id,name,email,avatar_url,department)')
+    .select('*, manager:profiles!manager_id(id,name,email,avatar_url,department), lark_webhook:lark_webhooks(id,name)')
     .order('date', { ascending: true })
     .order('start_time', { ascending: true })
 

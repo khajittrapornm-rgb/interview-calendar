@@ -2,7 +2,7 @@
 
 import { InterviewSlot } from '@/lib/types'
 import { formatThaiDate, formatTime } from '@/lib/utils'
-import { Clock, Trash2, Video, CheckCircle } from 'lucide-react'
+import { Clock, Trash2, Video, CheckCircle, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -56,6 +56,12 @@ export default function SlotCard({ slot, onDelete, onBook, showManager }: Props)
             </span>
             <span className="text-xs text-gray-400">({slot.duration_minutes} นาที)</span>
           </div>
+          {slot.lark_webhook && (
+            <div className="flex items-center gap-1 text-xs text-mint-600 bg-mint-50 rounded-lg px-2 py-0.5 mt-1.5 w-fit">
+              <Bell className="w-3 h-3 shrink-0" />
+              {slot.lark_webhook.name}
+            </div>
+          )}
           {slot.meet_link && (
             <a
               href={slot.meet_link}
