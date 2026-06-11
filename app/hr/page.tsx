@@ -155,11 +155,18 @@ export default function HRPage() {
 
   // Fetch ALL available slots (no filter) when entering compare mode
   const [allSlots, setAllSlots] = useState<InterviewSlot[]>([])
-  const fetchAllSlots = useCallback(async () => {
+  const fetchAllSlots = useCallback(async (thenRefreshOverlap = false, managerIds: string[] = []) => {
     try {
       const res = await fetch('/api/slots')
       const data = await res.json()
-      setAllSlots(Array.isArray(data) ? data : [])
+      const slots = Array.isArray(data) ? data : []
+      setAllSlots(slots)
+      // refresh overlap results ถ้ากำลังอยู่ใน compare mode
+      if (thenRefreshOverlap && managerIds.length >= 2) {
+        const newResults = findOverlaps(slots, managerIds)
+        setOverlapResults(newResults)
+        if (newResults.length === 0) toast('จองครบแล้ว ไม่มี slot ว่างตรงกันเหลือ', { icon: '✅' })
+      }
     } catch {
       toast.error('โหลดข้อมูลไม่สำเร็จ')
     }
@@ -531,8 +538,12 @@ export default function HRPage() {
           onClose={() => setBookingSlot(null)}
           onBooked={() => {
             fetchData()
-            fetchAllSlots()
-            setOverlapResults(null) // refresh overlap results after booking
+            // ถ้าอยู่ใน compare mode → refresh overlap แทนล้าง เพื่อจองคนต่อไปได้เลย
+            if (compareMode) {
+              fetchAllSlots(true, selectedManagerIds)
+            } else {
+              fetchAllSlots()
+            }
           }}
         />
       )}
